@@ -80,7 +80,7 @@ function YesNoBox {
 }
 
 function Gen_Rand_Str {
-    tr -dc 'a-zA-Z0-9' < /dev/urandom | fold -w "$1" | head -n 1
+    echo $(date +%s%N|md5sum|base64|head -c "$1")
 }
 
 echo "Dependencies"
@@ -89,90 +89,11 @@ sudo python3 -m pip install requests
 cp -r ../wine/.cache/* ~/.cache
 winetricks msxml6 || abort
 
-ARCH=$(
-    Radiolist '([title]="Build arch"
-                [default]="x64")' \
-        \
-        'x64' "X86_64" 'on' \
-        'arm64' "AArch64" 'off'
-)
-
-RELEASE_TYPE=$(
-    Radiolist '([title]="WSA release type"
-                [default]="retail")' \
-        \
-        'retail' "Stable Channel" 'on' \
-        'release preview' "Release Preview Channel" 'off' \
-        'insider slow' "Beta Channel" 'off' \
-        'insider fast' "Dev Channel" 'off'
-)
-
-MAGISK_VER=$(
-    Radiolist '([title]="Magisk version"
-                     [default]="stable")' \
-        \
-        'stable' "Stable Channel" 'on' \
-        'beta' "Beta Channel" 'off' \
-        'canary' "Canary Channel" 'off' \
-        'debug' "Canary Channel Debug Build" 'off'
-)
-
-if (YesNoBox '([title]="Install Gapps" [text]="Do you want to install gapps?")'); then
-    if [ -f "$DOWNLOAD_DIR"/MindTheGapps/MindTheGapps_"$ARCH".zip ]; then
-        GAPPS_BRAND=$(
-            Radiolist '([title]="Which gapps do you want to install?"
-                     [default]="OpenGapps")' \
-                \
-                'OpenGapps' "" 'on' \
-                'MindTheGapps' "" 'off'
-        )
-    else
-        GAPPS_BRAND="OpenGapps"
-    fi
-else
-    GAPPS_VARIANT="none"
-fi
-if [ $GAPPS_BRAND = "OpenGapps" ]; then
-    GAPPS_VARIANT=$(
-        Radiolist '([title]="Variants of gapps"
-                     [default]="pico")' \
-            \
-            'super' "" 'off' \
-            'stock' "" 'off' \
-            'full' "" 'off' \
-            'mini' "" 'off' \
-            'micro' "" 'off' \
-            'nano' "" 'off' \
-            'pico' "" 'on' \
-            'tvstock' "" 'off' \
-            'tvmini' "" 'off'
-    )
-else
-    GAPPS_VARIANT=$GAPPS_BRAND
+if [ GAPPS_VARIANT != "none" ]; then
+    GAPPS_BRAND="OpenGapps"
 fi
 
-if (YesNoBox '([title]="Remove Amazon AppStore" [text]="Do you want to keep amazon appStore?")'); then
-    REMOVE_AMAZON="keep"
-else
-    REMOVE_AMAZON="remove"
-fi
-
-ROOT_SOL=$(
-    Radiolist '([title]="Root solution"
-                     [default]="magisk")' \
-        \
-        'magisk' "" 'on' \
-        'none' "" 'off'
-)
-
-if (YesNoBox '([title]="Compress output" [text]="Do you want to compress the output?")'); then
-    COMPRESS_OUTPUT="yes"
-else
-    COMPRESS_OUTPUT="no"
-fi
-
-clear
-echo -e "ARCH=$ARCH\nRELEASE_TYPE=$RELEASE_TYPE\nMAGISK_VER=$MAGISK_VER\nGAPPS_VARIANT=$GAPPS_VARIANT\nREMOVE_AMAZON=$REMOVE_AMAZON\nROOT_SOL=$ROOT_SOL\nCOMPRESS_OUTPUT=$COMPRESS_OUTPUT"
+echo -e "ARCH=$ARCH\nRELEASE_TYPE=$RELEASE_TYPE\nMAGISK_VER=$MAGISK_VER\nGAPPS_VARIANT=$GAPPS_VARIANT\nREMOVE_AMAZON=$REMOVE_AMAZON\nROOT_SOL=$ROOT_SOL"
 
 echo "Generate Download Links"
 python3 generateWSALinks.py "$ARCH" "$RELEASE_TYPE" "$DOWNLOAD_DIR" "$DOWNLOAD_CONF_NAME" || abort
@@ -598,13 +519,10 @@ echo -e "\nFinishing building...."
 if [ ! -d "$OUTPUT_DIR" ]; then
     mkdir "$OUTPUT_DIR"
 fi
-if [ "$COMPRESS_OUTPUT" = "yes" ]; then
-    rm -f "${OUTPUT_DIR:?}"/"$artifact_name.7z" || abort
-    7z a "$OUTPUT_DIR"/"$artifact_name.7z" "$WORK_DIR/wsa/$ARCH/" || abort
-elif [ "$COMPRESS_OUTPUT" = "no" ]; then
-    rm -rf "${OUTPUT_DIR:?}/${artifact_name}" || abort
-    mv "$WORK_DIR"/wsa/"$ARCH" "$OUTPUT_DIR/$artifact_name" || abort
-fi
+
+rm -f "${OUTPUT_DIR:?}"/"$artifact_name.7z" || abort
+7z a "$OUTPUT_DIR"/"$artifact_name.7z" "$WORK_DIR/wsa/$ARCH/" || abort
+
 echo -e "done\n"
 
 echo "Cleanup Work Directory"
