@@ -1,3 +1,4 @@
+#!/bin/bash
 # 
 # This file is part of MagiskOnWSALocal.
 #
@@ -16,8 +17,8 @@
 #
 # Copyright (C) 2022 LSPosed Contributors
 #
-
-#!/bin/bash
+# DEBUG=1
+# CUSTOM_MAGISK=1
 if [ ! "$BASH_VERSION" ] ; then
     echo "Please do not use sh to run this script, just execute it directly" 1>&2
     exit 1
@@ -28,39 +29,51 @@ if [ "$HOST_ARCH" != "x86_64" ] && [ "$HOST_ARCH" != "aarch64" ]; then
     exit 1
 fi
 cd "$(dirname "$0")" || exit 1
-trap 'rm -rf -- "${WORK_DIR:?}"' EXIT
+trap umount_clean EXIT
 WORK_DIR=$(mktemp -d -t wsa-build-XXXXXXXXXX_) || exit 1
 DOWNLOAD_DIR=../download
 DOWNLOAD_CONF_NAME=download.list
 OUTPUT_DIR=../output
 MOUNT_DIR="$WORK_DIR"/system
-
+CLEAN_DOWNLOAD_WSA=0
+CLEAN_DOWNLOAD_MAGISK=0
+CLEAN_DOWNLOAD_GAPPS=0
+umount_clean(){
+    echo "Cleanup Work Directory"
+    if [ -d "$MOUNT_DIR" ]; then
+        if [ -d "$MOUNT_DIR/vendor" ]; then
+            sudo umount "$MOUNT_DIR"/vendor
+        fi
+        if [ -d "$MOUNT_DIR/product" ]; then
+            sudo umount "$MOUNT_DIR"/product
+        fi
+        if [ -d "$MOUNT_DIR/system_ext" ]; then
+            sudo umount "$MOUNT_DIR"/system_ext
+        fi
+        sudo umount "$MOUNT_DIR"
+    fi
+    sudo rm -rf "${WORK_DIR:?}"
+}
+clean_download(){
+    if [ -d "$DOWNLOAD_DIR" ]; then
+        echo "Cleanup Download Directory"
+        if [ "$CLEAN_DOWNLOAD_WSA" = "1" ]; then
+            rm -f "${WSA_ZIP_PATH:?}"
+        fi
+        if [ "$CLEAN_DOWNLOAD_MAGISK" = "1" ]; then
+            rm -f "${MAGISK_PATH:?}"
+        fi
+        if [ "$CLEAN_DOWNLOAD_GAPPS" = "1" ]; then
+            rm -f "${GAPPS_PATH:?}"
+        fi
+    fi
+}
 abort() {
     echo "An error has occurred, exit"
     if [ -d "$WORK_DIR" ]; then
-        echo "Cleanup Work Directory"
-        if [ -d "$MOUNT_DIR" ]; then
-            if [ -d "$MOUNT_DIR/vendor" ]; then
-                sudo umount "$MOUNT_DIR"/vendor
-            fi
-            if [ -d "$MOUNT_DIR/product" ]; then
-                sudo umount "$MOUNT_DIR"/product
-            fi
-            if [ -d "$MOUNT_DIR/system_ext" ]; then
-                sudo umount "$MOUNT_DIR"/system_ext
-            fi
-            sudo umount "$MOUNT_DIR"
-        fi
-        sudo rm -rf "${WORK_DIR:?}"
+        umount_clean
     fi
-    if [ -d "$DOWNLOAD_DIR" ]; then
-        echo "Cleanup Download Directory"
-        sudo rm -rf "${DOWNLOAD_DIR:?}"
-    fi
-    if [ -d "$OUTPUT_DIR" ]; then
-        echo "Cleanup Output Directory"
-        sudo rm -rf "${OUTPUT_DIR:?}"
-    fi
+    clean_download
     exit 1
 }
 trap abort INT TERM
@@ -85,55 +98,96 @@ function Gen_Rand_Str {
 
 echo "Dependencies"
 sudo apt update && sudo apt -y install setools lzip wine winetricks patchelf whiptail e2fsprogs python3-pip aria2
-sudo python3 -m pip install requests
+python3 -m pip install requests
 cp -r ../wine/.cache/* ~/.cache
 winetricks msxml6 || abort
 
 if [ GAPPS_VARIANT != "none" ]; then
-    GAPPS_BRAND="OpenGapps"
+    GAPPS_BRAND="OpenGApps"
 fi
 
 echo -e "ARCH=$ARCH\nRELEASE_TYPE=$RELEASE_TYPE\nMAGISK_VER=$MAGISK_VER\nGAPPS_VARIANT=$GAPPS_VARIANT\nREMOVE_AMAZON=$REMOVE_AMAZON\nROOT_SOL=$ROOT_SOL"
-
+declare -A RELEASE_TYPE_MAP=(["retail"]="Retail" ["release preview"]="RP" ["insider slow"]="WIS" ["insider fast"]="WIF")
+trap 'rm -f -- "${DOWNLOAD_DIR:?}/${DOWNLOAD_CONF_NAME}"' EXIT
 echo "Generate Download Links"
 python3 generateWSALinks.py "$ARCH" "$RELEASE_TYPE" "$DOWNLOAD_DIR" "$DOWNLOAD_CONF_NAME" || abort
-python3 generateMagiskLink.py "$MAGISK_VER" "$DOWNLOAD_DIR" "$DOWNLOAD_CONF_NAME" || abort
+if [ "$CUSTOM_MAGISK" != "1" ]; then
+    python3 generateMagiskLink.py "$MAGISK_VER" "$DOWNLOAD_DIR" "$DOWNLOAD_CONF_NAME" || abort
+fi
 if [ $GAPPS_VARIANT != 'none' ] && [ $GAPPS_VARIANT != '' ]; then
-    if [ $GAPPS_BRAND = "OpenGapps" ]; then
-        # TODO: Keep it pico since other variants of opengapps are unable to boot successfully
-        python3 generateGappsLink.py "$ARCH" "pico" "$DOWNLOAD_DIR" "$DOWNLOAD_CONF_NAME" || abort
-        # python3 generateGappsLink.py "$ARCH" "$GAPPS_VARIANT" "$DOWNLOAD_DIR" "$DOWNLOAD_CONF_NAME" || abort
+    if [ $GAPPS_BRAND = "OpenGApps" ]; then
+        python3 generateGappsLink.py "$ARCH" "$GAPPS_VARIANT" "$DOWNLOAD_DIR" "$DOWNLOAD_CONF_NAME" || abort
     fi
 fi
-trap 'rm -f -- "${DOWNLOAD_DIR:?}/${DOWNLOAD_CONF_NAME}"' EXIT
 
 echo "Download Artifacts"
-if ! aria2c --no-conf --log-level=info --log="$DOWNLOAD_DIR/aria2_download.log" -x16 -s16 -j5 -c -R -m0 -d"$DOWNLOAD_DIR" -i"$DOWNLOAD_DIR"/"$DOWNLOAD_CONF_NAME"; then
-  echo "We have encountered an error while downloading files."
-  exit 1
+if ! aria2c --no-conf --log-level=info --log="$DOWNLOAD_DIR/aria2_download.log" -x16 -s16 -j5 -c -R -m0 --allow-overwrite=true --conditional-get=true -d"$DOWNLOAD_DIR" -i"$DOWNLOAD_DIR"/"$DOWNLOAD_CONF_NAME"; then
+    echo "We have encountered an error while downloading files."
+    exit 1
 fi
+WSA_ZIP_PATH=$DOWNLOAD_DIR/wsa-$ARCH-${RELEASE_TYPE_MAP[$RELEASE_TYPE]}.zip
+MAGISK_PATH=$DOWNLOAD_DIR/magisk-$MAGISK_VER.zip
+GAPPS_PATH="$DOWNLOAD_DIR"/OpenGApps-$ARCH-$GAPPS_VARIANT.zip
 
 echo "Extract WSA"
-WSA_WORK_ENV="${WORK_DIR:?}"/ENV
-if [ -f "$WSA_WORK_ENV" ]; then rm -f "${WSA_WORK_ENV:?}"; fi
-export WSA_WORK_ENV
-python3 extractWSA.py "$ARCH" "$WORK_DIR" || abort
-echo -e "Extract done\n"
-source "${WORK_DIR:?}/ENV"
-
+if [ -f "$WSA_ZIP_PATH" ]; then
+    WSA_WORK_ENV="${WORK_DIR:?}"/ENV
+    if [ -f "$WSA_WORK_ENV" ]; then rm -f "${WSA_WORK_ENV:?}"; fi
+    export WSA_WORK_ENV
+    if ! python3 extractWSA.py "$ARCH" "$WSA_ZIP_PATH" "$WORK_DIR"; then
+        echo "Unzip WSA failed, is the download incomplete?"
+        CLEAN_DOWNLOAD_WSA=1
+        abort
+    fi
+    echo -e "Extract done\n"
+    source "${WORK_DIR:?}/ENV" || abort
+else
+    echo "The WSA zip package does not exist, is the download incomplete?"
+    exit 1
+fi
 echo "Extract Magisk"
-python3 extractMagisk.py "$ARCH" "$DOWNLOAD_DIR/magisk.zip" "$WORK_DIR" || abort
+
+if [ -f "$MAGISK_PATH" ]; then
+    if ! python3 extractMagisk.py "$ARCH" "$MAGISK_PATH" "$WORK_DIR"; then
+        echo "Unzip Magisk failed, is the download incomplete?"
+        CLEAN_DOWNLOAD_MAGISK=1
+        abort
+    fi
+elif [ "$CUSTOM_MAGISK" != "1" ]; then
+    echo "The Magisk zip package does not exist, is the download incomplete?"
+    exit 1
+else
+    echo "The Magisk zip package does not exist, rename it to magisk-debug.zip and put it in the download folder."
+    exit 1
+fi
 echo -e "done\n"
 
 if [ $GAPPS_VARIANT != 'none' ] && [ $GAPPS_VARIANT != '' ]; then
     echo "Extract GApps"
     mkdir -p "$WORK_DIR"/gapps || abort
-    if [ $GAPPS_BRAND = "OpenGapps" ]; then
-        unzip -p "$DOWNLOAD_DIR"/gapps.zip {Core,GApps}/'*.lz' | tar --lzip -C "$WORK_DIR"/gapps -xf - -i --strip-components=2 --exclude='setupwizardtablet-x86_64' --exclude='packageinstallergoogle-all' --exclude='speech-common' --exclude='markup-lib-arm' --exclude='markup-lib-arm64' --exclude='markup-all' --exclude='setupwizarddefault-x86_64' --exclude='pixellauncher-all' --exclude='pixellauncher-common' || abort
+    if [ $GAPPS_BRAND = "OpenGApps" ]; then
+        if [ -f "$GAPPS_PATH" ]; then
+            if ! unzip -p "$GAPPS_PATH" {Core,GApps}/'*.lz' | tar --lzip -C "$WORK_DIR"/gapps -xf - -i --strip-components=2 --exclude='setupwizardtablet-x86_64' --exclude='packageinstallergoogle-all' --exclude='speech-common' --exclude='markup-lib-arm' --exclude='markup-lib-arm64' --exclude='markup-all' --exclude='setupwizarddefault-x86_64' --exclude='pixellauncher-all' --exclude='pixellauncher-common'; then
+                echo "Unzip OpenGApps failed, is the download incomplete?"
+                CLEAN_DOWNLOAD_GAPPS=1
+                abort
+            fi
+        else
+            echo "The OpenGApps zip package does not exist, is the download incomplete?"
+            exit 1
+        fi
     else
-        unzip "$DOWNLOAD_DIR"/MindTheGapps/MindTheGapps_"$ARCH".zip "system/*" -x "system/addon.d/*" "system/system_ext/priv-app/SetupWizard/*" -d "$WORK_DIR"/gapps || abort
+        if ! unzip "$DOWNLOAD_DIR"/MindTheGapps-"$ARCH".zip "system/*" -x "system/addon.d/*" "system/system_ext/priv-app/SetupWizard/*" -d "$WORK_DIR"/gapps; then
+            echo "Unzip MindTheGapps failed, package is corrupted?"
+            abort
+        fi
         mv "$WORK_DIR"/gapps/system/* "$WORK_DIR"/gapps || abort
-        sudo rm -rf "${WORK_DIR:?}"/gapps/system || abort
+        rm -rf "${WORK_DIR:?}"/gapps/system || abort
+    fi
+    cp -r ../"$ARCH"/gapps/* "$WORK_DIR"/gapps || abort
+    if [ $GAPPS_BRAND = "MindTheGapps" ]; then
+        mv "$WORK_DIR"/gapps/priv-app/* "$WORK_DIR"/gapps/system_ext/priv-app || abort
+        rm -rf "${WORK_DIR:?}"/gapps/priv-app || abort
     fi
     echo -e "Extract done\n"
 fi
@@ -165,8 +219,11 @@ fi
 if [ -d "$WORK_DIR"/magisk ]; then
     SYSTEM_SIZE=$(( SYSTEM_SIZE + $(du --apparent-size -sB512 "$WORK_DIR"/magisk/magisk | cut -f1) ))
 fi
-if [ -f "$DOWNLOAD_DIR"/magisk.zip ]; then
-    SYSTEM_SIZE=$(( SYSTEM_SIZE + $(du --apparent-size -sB512 "$DOWNLOAD_DIR"/magisk.zip | cut -f1) ))
+if [ -f "$MAGISK_PATH" ]; then
+    SYSTEM_SIZE=$(( SYSTEM_SIZE + $(du --apparent-size -sB512 "$MAGISK_PATH" | cut -f1) ))
+fi
+if [ -d "../$ARCH/system" ]; then
+    SYSTEM_SIZE=$(( SYSTEM_SIZE + $(du --apparent-size -sB512 "../$ARCH/system" | cut -f1) ))
 fi
 resize2fs "$WORK_DIR"/wsa/"$ARCH"/system.img "$SYSTEM_SIZE"s || abort
 
@@ -196,7 +253,7 @@ if [ "$ROOT_SOL" = 'magisk' ] || [ "$ROOT_SOL" = '' ]; then
     sudo chown root:root "$MOUNT_DIR"/sbin
     sudo chmod 0700 "$MOUNT_DIR"/sbin
     sudo cp "$WORK_DIR"/magisk/magisk/* "$MOUNT_DIR"/sbin/
-    sudo cp "$DOWNLOAD_DIR"/magisk.zip "$MOUNT_DIR"/sbin/magisk.apk
+    sudo cp "$MAGISK_PATH" "$MOUNT_DIR"/sbin/magisk.apk
     sudo tee -a "$MOUNT_DIR"/sbin/loadpolicy.sh <<EOF
 #!/system/bin/sh
 mkdir -p /data/adb/magisk
@@ -299,70 +356,65 @@ echo -e "Merge Language Resources done\n"
 
 echo "Add extra packages"
 sudo cp -r ../"$ARCH"/system/* "$MOUNT_DIR" || abort
-sudo find "$MOUNT_DIR"/system/priv-app -type d -exec chmod 0755 {} \;
-sudo find "$MOUNT_DIR"/system/priv-app -type f -exec chmod 0644 {} \;
-sudo find "$MOUNT_DIR"/system/priv-app -exec chcon --reference="$MOUNT_DIR"/system/priv-app {} \;
+find ../"$ARCH"/system/system/priv-app/ -maxdepth 1 -mindepth 1 -printf '%P\n' | xargs -I dir sudo find "$MOUNT_DIR"/system/priv-app/dir -type d -exec chmod 0755 {} \;
+find ../"$ARCH"/system/system/priv-app/ -maxdepth 1 -mindepth 1 -printf '%P\n' | xargs -I dir sudo find "$MOUNT_DIR"/system/priv-app/dir -type f -exec chmod 0644 {} \;
+find ../"$ARCH"/system/system/priv-app/ -maxdepth 1 -mindepth 1 -printf '%P\n' | xargs -I dir sudo find "$MOUNT_DIR"/system/priv-app/dir -exec chown root:root {} \;
+find ../"$ARCH"/system/system/priv-app/ -maxdepth 1 -mindepth 1 -printf '%P\n' | xargs -I dir sudo find "$MOUNT_DIR"/system/priv-app/dir -exec chcon --reference="$MOUNT_DIR"/system/priv-app {} \;
+find ../"$ARCH"/system/system/etc/permissions/ -maxdepth 1 -mindepth 1 -printf '%P\n' | xargs -I file sudo find "$MOUNT_DIR"/system/etc/permissions/file -type f -exec chmod 0644 {} \;
+find ../"$ARCH"/system/system/etc/permissions/ -maxdepth 1 -mindepth 1 -printf '%P\n' | xargs -I file sudo find "$MOUNT_DIR"/system/etc/permissions/file -exec chown root:root {} \;
+find ../"$ARCH"/system/system/etc/permissions/ -maxdepth 1 -mindepth 1 -printf '%P\n' | xargs -I file sudo find "$MOUNT_DIR"/system/etc/permissions/file -type f -exec chcon --reference="$MOUNT_DIR"/system/etc/permissions/platform.xml {} \;
 echo -e "Add extra packages done\n"
 
 if [ $GAPPS_VARIANT != 'none' ] && [ $GAPPS_VARIANT != '' ]; then
     echo "Integrate GApps"
-    cp -r ../"$ARCH"/gapps/* "$WORK_DIR"/gapps || abort
-    for d in $(find "$WORK_DIR"/gapps -mindepth 1 -type d -type d); do
-        sudo chmod 0755 "$d"
-        sudo chown root:root "$d"
+
+    find "$WORK_DIR/gapps/" -mindepth 1 -type d -exec sudo chmod 0755 {} \;
+    find "$WORK_DIR/gapps/" -mindepth 1 -type d -exec sudo chown root:root {} \;
+    file_list="$(find "$WORK_DIR/gapps/" -mindepth 1 -type f | cut -d/ -f5-)"
+    for file in $file_list; do
+        sudo chown root:root "$WORK_DIR/gapps/${file}"
+        sudo chmod 0644 "$WORK_DIR/gapps/${file}"
     done
-    for f in $(find "$WORK_DIR"/gapps -type f); do
-        type=$(echo "$f" | sed 's/.*\.//')
-        if [ "$type" == "sh" ] || [ "$type" == "$f" ]; then
-            sudo chmod 0755 "$f"
-        else
-            sudo chmod 0644 "$f"
-        fi
-        sudo chown root:root "$f"
-        sudo chcon -h --reference="$MOUNT_DIR"/product/etc/permissions/com.android.settings.intelligence.xml "$f"
-        sudo chcon --reference="$MOUNT_DIR"/product/etc/permissions/com.android.settings.intelligence.xml "$f"
-    done
-    shopt -s extglob
-    sudo cp --preserve=a -r "$WORK_DIR"/gapps/product/* "$MOUNT_DIR"/product || abort
-    sudo rm -rf "${WORK_DIR:?}"/gapps/product || abort
-    if [ $GAPPS_BRAND = "MindTheGapps" ]; then
-        mv "$WORK_DIR"/gapps/priv-app/* "$WORK_DIR"/gapps/system_ext/priv-app || abort
-        sudo cp --preserve=a -r "$WORK_DIR"/gapps/system_ext/* "$MOUNT_DIR"/system_ext/ || abort
-        ls "$WORK_DIR"/gapps/system_ext/etc/ | xargs -n 1 -I dir sudo find "$MOUNT_DIR"/system_ext/etc/dir -type f -exec chmod 0644 {} \;
-        ls "$WORK_DIR"/gapps/system_ext/etc/ | xargs -n 1 -I dir sudo find "$MOUNT_DIR"/system_ext/etc/dir -type d -exec chcon --reference="$MOUNT_DIR"/system_ext/etc/permissions {} \;
-        ls "$WORK_DIR"/gapps/system_ext/etc/ | xargs -n 1 -I dir sudo find "$MOUNT_DIR"/system_ext/etc/dir -type f -exec chcon --reference="$MOUNT_DIR"/system_ext/etc/permissions {} \;
+
+    if [ $GAPPS_BRAND = "OpenGApps" ]; then
+        find "$WORK_DIR"/gapps/ -maxdepth 1 -mindepth 1 -type d -not -path '*product' -exec sudo cp --preserve=all -r {} "$MOUNT_DIR"/system \; || abort
+    elif [ $GAPPS_BRAND = "MindTheGapps" ]; then
+        sudo cp --preserve=all -r "$WORK_DIR"/gapps/system_ext/* "$MOUNT_DIR"/system_ext/ || abort
         if [ -e "$MOUNT_DIR"/system_ext/priv-app/SetupWizard ] ; then
             rm -rf "${MOUNT_DIR:?}/system_ext/priv-app/Provision"
         fi
-        sudo rm -rf "${WORK_DIR:?}"/gapps/system_ext || abort
     fi
-    sudo cp --preserve=a -r "$WORK_DIR"/gapps/* "$MOUNT_DIR"/system || abort
+    sudo cp --preserve=all -r "$WORK_DIR"/gapps/product/* "$MOUNT_DIR"/product || abort
 
-    sudo find "$MOUNT_DIR"/system/{app,etc,framework,priv-app} -exec chown root:root {} \;
-    sudo find "$MOUNT_DIR"/product/{app,etc,overlay,priv-app,lib64,lib,framework} -exec chown root:root {} \;
+    find "$WORK_DIR"/gapps/product/overlay -maxdepth 1 -mindepth 1 -printf '%P\n' | xargs -I file sudo find "$MOUNT_DIR"/product/overlay/file -type f -exec chcon --reference="$MOUNT_DIR"/product/overlay/FontNotoSerifSource/FontNotoSerifSourceOverlay.apk {} \;
 
-    sudo find "$MOUNT_DIR"/system/{app,etc,framework,priv-app} -type d -exec chmod 0755 {} \;
-    sudo find "$MOUNT_DIR"/product/{app,etc,overlay,priv-app,lib64,lib,framework} -type d -exec chmod 0755 {} \;
-
-    sudo find "$MOUNT_DIR"/system/{app,framework,priv-app} -type f -exec chmod 0644 {} \;
-    sudo find "$MOUNT_DIR"/product/{app,etc,overlay,priv-app,lib64,lib,framework} -type f -exec chmod 0644 {} \;
-
-    sudo find "$MOUNT_DIR"/system/{app,framework,priv-app} -type d -exec chcon --reference="$MOUNT_DIR"/system/app {} \;
-    sudo find "$MOUNT_DIR"/product/{app,etc,overlay,priv-app,lib64,lib,framework} -type d -exec chcon --reference="$MOUNT_DIR"/product/app {} \;
-
-    sudo find "$MOUNT_DIR"/system/{app,framework,priv-app} -type f -exec chcon --reference="$MOUNT_DIR"/system/framework/ext.jar {} \;
-    sudo find "$MOUNT_DIR"/product/{app,etc,overlay,priv-app,lib64,lib,framework} -type f -exec chcon --reference="$MOUNT_DIR"/product/etc/permissions/com.android.settings.intelligence.xml {} \;
-
-    if [ $GAPPS_BRAND = "OpenGapps" ]; then
-        ls "$WORK_DIR"/gapps/etc/ | xargs -n 1 -I dir sudo find "$MOUNT_DIR"/system/etc/dir -type f -exec chmod 0644 {} \;
-        ls "$WORK_DIR"/gapps/etc/ | xargs -n 1 -I dir sudo find "$MOUNT_DIR"/system/etc/dir -type d -exec chcon --reference="$MOUNT_DIR"/system/etc/permissions {} \;
-        ls "$WORK_DIR"/gapps/etc/ | xargs -n 1 -I dir sudo find "$MOUNT_DIR"/system/etc/dir -type f -exec chcon --reference="$MOUNT_DIR"/system/etc/permissions {} \;
+    if [ $GAPPS_BRAND = "OpenGApps" ]; then
+        find "$WORK_DIR"/gapps/app/ -maxdepth 1 -mindepth 1 -printf '%P\n' | xargs -I dir sudo find "$MOUNT_DIR"/system/app/dir -type d -exec chcon --reference="$MOUNT_DIR"/system/app {} \;
+        find "$WORK_DIR"/gapps/framework/ -maxdepth 1 -mindepth 1 -printf '%P\n' | xargs -I dir sudo find "$MOUNT_DIR"/system/framework/dir -type d -exec chcon --reference="$MOUNT_DIR"/system/framework {} \;
+        find "$WORK_DIR"/gapps/priv-app/ -maxdepth 1 -mindepth 1 -printf '%P\n' | xargs -I dir sudo find "$MOUNT_DIR"/system/priv-app/dir -type d -exec chcon --reference="$MOUNT_DIR"/system/priv-app {} \;
+        find "$WORK_DIR"/gapps/app/ -maxdepth 1 -mindepth 1 -printf '%P\n' | xargs -I file sudo find "$MOUNT_DIR"/system/app/file -type f -exec chcon --reference="$MOUNT_DIR"/system/app/KeyChain/KeyChain.apk {} \;
+        find "$WORK_DIR"/gapps/framework/ -maxdepth 1 -mindepth 1 -printf '%P\n' | xargs -I file sudo find "$MOUNT_DIR"/system/framework/file -type f -exec chcon --reference="$MOUNT_DIR"/system/framework/ext.jar {} \;
+        find "$WORK_DIR"/gapps/priv-app/ -maxdepth 1 -mindepth 1 -printf '%P\n' | xargs -I file sudo find "$MOUNT_DIR"/system/priv-app/file -type f -exec chcon --reference="$MOUNT_DIR"/system/priv-app/Shell/Shell.apk {} \;
+        find "$WORK_DIR"/gapps/etc/ -maxdepth 1 -mindepth 1 -printf '%P\n' | xargs -I dir sudo find "$MOUNT_DIR"/system/etc/dir -type d -exec chcon --reference="$MOUNT_DIR"/system/etc/permissions {} \;
+        find "$WORK_DIR"/gapps/etc/ -maxdepth 1 -mindepth 1 -printf '%P\n' | xargs -I dir sudo find "$MOUNT_DIR"/system/etc/dir -type f -exec chcon --reference="$MOUNT_DIR"/system/etc/permissions {} \;
     else
-        sudo find "$MOUNT_DIR"/system_ext/{priv-app,etc} -exec chown root:root {} \;
-        sudo find "$MOUNT_DIR"/system_ext/{priv-app,etc} -type d -exec chmod 0755 {} \;
-        sudo find "$MOUNT_DIR"/system_ext/{priv-app,etc} -type f -exec chmod 0644 {} \;
-        sudo find "$MOUNT_DIR"/system_ext/{priv-app,etc} -type d -exec chcon --reference="$MOUNT_DIR"/system_ext/priv-app {} \;
-        sudo find "$MOUNT_DIR"/system_ext/{priv-app,etc} -type f -exec chcon --reference="$MOUNT_DIR"/system_ext/etc/permissions/com.android.settings.xml {} \;
+        find "$WORK_DIR"/gapps/product/app/ -maxdepth 1 -mindepth 1 -printf '%P\n' | xargs -I item sudo find "$MOUNT_DIR"/product/app/item -type d -exec chcon --reference="$MOUNT_DIR"/product/app {} \;
+        find "$WORK_DIR"/gapps/product/etc/ -maxdepth 1 -mindepth 1 -printf '%P\n' | xargs -I item sudo find "$MOUNT_DIR"/product/etc/item -type d -exec chcon --reference="$MOUNT_DIR"/product/etc {} \;
+        find "$WORK_DIR"/gapps/product/priv-app/ -maxdepth 1 -mindepth 1 -printf '%P\n' | xargs -I item sudo find "$MOUNT_DIR"/product/priv-app/item -type d -exec chcon --reference="$MOUNT_DIR"/product/priv-app {} \;
+        find "$WORK_DIR"/gapps/product/framework/ -maxdepth 1 -mindepth 1 -printf '%P\n' | xargs -I item sudo find "$MOUNT_DIR"/product/framework/item -type d -exec chcon --reference="$MOUNT_DIR"/product/framework {} \;
+
+        find "$WORK_DIR"/gapps/product/app/ -maxdepth 1 -mindepth 1 -printf '%P\n' | xargs -I item sudo find "$MOUNT_DIR"/product/app/item -type f -exec chcon --reference="$MOUNT_DIR"/product/app/HomeApp/HomeApp.apk {} \;
+        find "$WORK_DIR"/gapps/product/etc/ -maxdepth 1 -mindepth 1 -printf '%P\n' | xargs -I item sudo find "$MOUNT_DIR"/product/etc/item -type f -exec chcon --reference="$MOUNT_DIR"/product/etc/permissions/com.android.settings.intelligence.xml {} \;
+        find "$WORK_DIR"/gapps/product/priv-app/ -maxdepth 1 -mindepth 1 -printf '%P\n' | xargs -I item sudo find "$MOUNT_DIR"/product/priv-app/item -type f -exec chcon --reference="$MOUNT_DIR"/product/priv-app/SettingsIntelligence/SettingsIntelligence.apk {} \;
+        find "$WORK_DIR"/gapps/product/framework/ -maxdepth 1 -mindepth 1 -printf '%P\n' | xargs -I item sudo find "$MOUNT_DIR"/product/framework/item -type f -exec chcon --reference="$MOUNT_DIR"/product/etc/permissions/com.android.settings.intelligence.xml {} \;
+        find "$WORK_DIR"/gapps/system_ext/etc/permissions/ -maxdepth 1 -mindepth 1 -printf '%P\n' | xargs -I file sudo find "$MOUNT_DIR"/system_ext/etc/permissions/file -type f -exec chcon --reference="$MOUNT_DIR"/system_ext/etc/permissions/com.android.systemui.xml {} \;
+
+        sudo chcon --reference="$MOUNT_DIR"/product/lib64/libjni_eglfence.so "$MOUNT_DIR"/product/lib
+        find "$WORK_DIR"/gapps/product/lib/ -maxdepth 1 -mindepth 1 -printf '%P\n' | xargs -I file sudo find "$MOUNT_DIR"/product/lib/file -exec chcon --reference="$MOUNT_DIR"/product/lib64/libjni_eglfence.so {} \;
+        find "$WORK_DIR"/gapps/product/lib64/ -maxdepth 1 -mindepth 1 -printf '%P\n' | xargs -I file sudo find "$MOUNT_DIR"/product/lib64/file -type f -exec chcon --reference="$MOUNT_DIR"/product/lib64/libjni_eglfence.so {} \;        
+        find "$WORK_DIR"/gapps/system_ext/priv-app/ -maxdepth 1 -mindepth 1 -printf '%P\n' | xargs -I dir sudo find "$MOUNT_DIR"/system_ext/priv-app/dir -type d -exec chcon --reference="$MOUNT_DIR"/system_ext/priv-app {} \;
+        find "$WORK_DIR"/gapps/system_ext/etc/ -maxdepth 1 -mindepth 1 -printf '%P\n' | xargs -I dir sudo find "$MOUNT_DIR"/system_ext/etc/dir -type d -exec chcon --reference="$MOUNT_DIR"/system_ext/etc {} \;
+        find "$WORK_DIR"/gapps/system_ext/priv-app/ -maxdepth 1 -mindepth 1 -printf '%P\n' | xargs -I dir sudo find "$MOUNT_DIR"/system_ext/priv-app/dir -type f -exec chcon --reference="$MOUNT_DIR"/system_ext/priv-app/Settings/Settings.apk {} \;
     fi
 
     sudo patchelf --replace-needed libc.so "../linker/$HOST_ARCH/libc.so" "$WORK_DIR"/magisk/magiskpolicy || abort
@@ -401,7 +453,7 @@ echo -e "Shrink images done\n"
 
 echo "Remove signature and add scripts"
 sudo rm -rf "${WORK_DIR:?}"/wsa/"$ARCH"/\[Content_Types\].xml "$WORK_DIR"/wsa/"$ARCH"/AppxBlockMap.xml "$WORK_DIR"/wsa/"$ARCH"/AppxSignature.p7x "$WORK_DIR"/wsa/"$ARCH"/AppxMetadata || abort
-cp "$DOWNLOAD_DIR"/vclibs.appx "$DOWNLOAD_DIR"/xaml.appx "$WORK_DIR"/wsa/"$ARCH" || abort
+cp "$DOWNLOAD_DIR"/vclibs-"$ARCH".appx "$DOWNLOAD_DIR"/xaml-"$ARCH".appx "$WORK_DIR"/wsa/"$ARCH" || abort
 tee "$WORK_DIR"/wsa/"$ARCH"/Install.ps1 <<EOF
 # Automated Install script by Midonei
 # http://github.com/doneibcn
@@ -436,7 +488,7 @@ elseif ((\$args.Count -eq 1) -and (\$args[0] -eq "EVAL")) {
     exit
 }
 
-if (((Test-Path -Path $(ls -Q "$WORK_DIR"/wsa/"$ARCH" | paste -sd "," -)) -eq \$false).Count) {
+if (((Test-Path -Path $(find "$WORK_DIR"/wsa/"$ARCH" -maxdepth 1 -mindepth 1 -printf "\"%P\"\n" | paste -sd "," -)) -eq \$false).Count) {
     Write-Error "Some files are missing in the folder. Please try to build again. Press any key to exist"
     \$null = \$Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
     exit 1
@@ -458,8 +510,8 @@ if (\$VMP.State -ne "Enabled") {
     }
 }
 
-Add-AppxPackage -ForceApplicationShutdown -ForceUpdateFromAnyVersion -Path vclibs.appx
-Add-AppxPackage -ForceApplicationShutdown -ForceUpdateFromAnyVersion -Path xaml.appx
+Add-AppxPackage -ForceApplicationShutdown -ForceUpdateFromAnyVersion -Path vclibs-$ARCH.appx
+Add-AppxPackage -ForceApplicationShutdown -ForceUpdateFromAnyVersion -Path xaml-$ARCH.appx
 
 \$Installed = \$null
 \$Installed = Get-AppxPackage -Name 'MicrosoftCorporationII.WindowsSubsystemForAndroid'
@@ -501,28 +553,32 @@ echo "Generate info"
 if [[ "$ROOT_SOL" = "none" ]]; then
     name1=""
 elif [[ "$ROOT_SOL" = "" ]]; then
-    name1="-with-magisk"
+    name1="-with-magisk-$MAGISK_VER"
 else
-    name1="-with-$ROOT_SOL"
+    name1="-with-$ROOT_SOL-$MAGISK_VER"
 fi
 if [[ "$GAPPS_VARIANT" = "none" || "$GAPPS_VARIANT" = "" ]]; then
     name2="-NoGApps"
 else
-    if [ "$GAPPS_VARIANT" != "pico" ] && [ $GAPPS_BRAND = "OpenGapps" ]; then
-        echo ":warning: Since OpenGapps doesn't officially support Android 12.1 yet, lock the variant to pico!"
+    if [ $GAPPS_BRAND = "OpenGApps" ]; then
+        name2="-$GAPPS_BRAND-${GAPPS_VARIANT}"
+    else
+        name2="-$GAPPS_BRAND"
     fi
-    name2="-GApps-${GAPPS_VARIANT}"
+    if [ $GAPPS_BRAND = "OpenGApps" ] && [ "$DEBUG" != "1" ]; then
+        echo ":warning: Since OpenGApps doesn't officially support Android 12.1 yet, lock the variant to pico!"
+    fi
 fi
 artifact_name="WSA${name1}${name2}_${WSA_VER}_${ARCH}_${WSA_REL}"
 echo "$artifact_name"
 echo -e "\nFinishing building...."
-if [ ! -d "$OUTPUT_DIR" ]; then
-    mkdir "$OUTPUT_DIR"
+if [ -f "$OUTPUT_DIR" ]; then
+    sudo rm -rf "${OUTPUT_DIR:?}"
 fi
-
-rm -f "${OUTPUT_DIR:?}"/"$artifact_name.7z" || abort
+if [ ! -d "$OUTPUT_DIR" ]; then
+    mkdir -p "$OUTPUT_DIR"
+fi
 7z a "$OUTPUT_DIR"/"$artifact_name.7z" "$WORK_DIR/wsa/$ARCH/" || abort
-
 echo -e "done\n"
 
 echo "Cleanup Work Directory"

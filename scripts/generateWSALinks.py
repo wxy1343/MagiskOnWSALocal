@@ -1,4 +1,5 @@
-# 
+#!/usr/bin/python
+#
 # This file is part of MagiskOnWSALocal.
 #
 # MagiskOnWSALocal is free software: you can redistribute it and/or modify
@@ -16,8 +17,6 @@
 #
 # Copyright (C) 2022 LSPosed Contributors
 #
-
-#!/usr/bin/python
 
 import sys
 
@@ -86,14 +85,14 @@ if not os.path.exists(download_dir):
 tmpdownlist = open(download_dir/tempScript, 'a')
 for i, v, f in identities:
     if re.match(f"Microsoft\.UI\.Xaml\..*_{arch}_.*\.appx", f):
-        out_file = download_dir / "xaml.appx"
-        out_file_name = "xaml.appx"
+        out_file_name = f"xaml-{arch}.appx"
+        out_file = download_dir / out_file_name
     # elif re.match(f"Microsoft\.VCLibs\..+\.UWPDesktop_.*_{arch}_.*\.appx", f):
     #     out_file = download_dir / "vclibs.appx"
     #     out_file_name = "vclibs.appx"
     elif re.match(f"MicrosoftCorporationII\.WindowsSubsystemForAndroid_.*\.msixbundle", f):
-        out_file = download_dir / "wsa.zip"
-        out_file_name = "wsa.zip"
+        out_file_name = f"wsa-{arch}-{release_type}.zip"
+        out_file = download_dir / out_file_name
     else:
         continue
     out = requests.post(
@@ -106,13 +105,11 @@ for i, v, f in identities:
     for l in doc.getElementsByTagName("FileLocation"):
         url = l.getElementsByTagName("Url")[0].firstChild.nodeValue
         if len(url) != 99:
-            if not os.path.isfile(out_file):
-                print(f"download link: {url} to {out_file}", flush=True)
-                # urllib.request.urlretrieve(url, out_file)
-                tmpdownlist.writelines(url + '\n')
-                tmpdownlist.writelines(f'  dir={download_dir}\n')
-                tmpdownlist.writelines(f'  out={out_file_name}\n')
+            print(f"download link: {url} to {out_file}", flush=True)
+            tmpdownlist.writelines(url + '\n')
+            tmpdownlist.writelines(f'  dir={download_dir}\n')
+            tmpdownlist.writelines(f'  out={out_file_name}\n')
 tmpdownlist.writelines(f'https://aka.ms/Microsoft.VCLibs.{arch}.14.00.Desktop.appx\n')
 tmpdownlist.writelines(f'  dir={download_dir}\n')
-tmpdownlist.writelines(f'  out=vclibs.appx\n')
+tmpdownlist.writelines(f'  out=vclibs-{arch}.appx\n')
 tmpdownlist.close
