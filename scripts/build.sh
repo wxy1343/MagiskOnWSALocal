@@ -18,7 +18,7 @@
 # Copyright (C) 2022 LSPosed Contributors
 #
 
-if [ ! "$BASH_VERSION" ] ; then
+if [ ! "$BASH_VERSION" ]; then
     echo "Please do not use sh to run this script, just execute it directly" 1>&2
     exit 1
 fi
@@ -34,7 +34,7 @@ DOWNLOAD_DIR=../download
 DOWNLOAD_CONF_NAME=download.list
 OUTPUT_DIR=../output
 MOUNT_DIR="$WORK_DIR"/system
-umount_clean(){
+umount_clean() {
     if [ -d "$MOUNT_DIR" ]; then
         echo "Cleanup Work Directory"
         if [ -d "$MOUNT_DIR/vendor" ]; then
@@ -52,7 +52,7 @@ umount_clean(){
         rm -rf "${WORK_DIR:?}"
     fi
 }
-clean_download(){
+clean_download() {
     if [ -d "$DOWNLOAD_DIR" ]; then
         echo "Cleanup Download Directory"
         if [ "$CLEAN_DOWNLOAD_WSA" ]; then
@@ -80,8 +80,7 @@ function Gen_Rand_Str {
     echo $(date +%s%N|md5sum|base64|head -c "$1")
 }
 
-
-default(){
+default() {
     ARCH=x64
     RELEASE_TYPE=retail
     MAGISK_VER=stable
@@ -90,77 +89,11 @@ default(){
     ROOT_SOL=magisk
 }
 
-exit_with_message(){
+exit_with_message() {
     echo "ERROR: $1"
     usage
     exit 1
 }
-
-usage(){
-    default
-    echo "Usage:
-    --arch          Architecture of WSA. x64 or arm64. default: $ARCH
-    --release-type  Release type of WSA. retail, RP (Release Preview), WIS (Insider Slow) or WIF (Insider Fast). default: $RELEASE_TYPE
-    --magisk-ver    Magisk version, stable or canary, default: $MAGISK_VER
-    --gapps-brand   GApps brand. OpenGApps, MindTheGapps or none for no integration of GApps. default: $GAPPS_BRAND
-    --gapps-variant GApps variant. pico or full, etc...., default: $GAPPS_VARIANT
-    --root-sol      Root solution. magisk or none, default: $ROOT_SOL
-    --remove-amazon Remove Amazon Appstore from the system. default: false
-    --compress      Compress the WSA. default: false
-    --offline       Build WSA offline. default: false
-    --magisk-custom Install custom Magisk. default: false
-    --debug         Debug build mode. default: false
-    --help          Show this help message and exit.
-
-    Example: 
-        ./build.sh --arch x64 --release-type retail --magisk-ver stable --gapps-brand OpenGApps --gapps-variant pico --remove-amazon
-        ./build.sh --arch x64 --release-type retail --remove-amazon --magisk-custom --offline
-        ./build.sh --release-type RP
-    "
-}
-
-ARGUMENT_LIST=(
-  "arch:"
-  "release-type:"
-  "magisk-ver:"
-  "gapps-brand:"
-  "gapps-variant:"
-  "root-sol:"
-  "remove-amazon"
-  "compress"
-  "offline"
-  "magisk-custom"
-  "debug"
-  "help"
-)
-
-default
-
-opts=$(getopt \
-  --longoptions "$(printf "%s," "${ARGUMENT_LIST[@]}")" \
-  --name "$(basename "$0")" \
-  --options "" \
-  -- "$@"
-) || exit_with_message "Failed to parse options, please check your input"
-
-eval set --"$opts"
-while [[ $# -gt 0 ]]; do
-   case "$1" in
-        --arch            ) ARCH="$2"; shift 2 ;;
-        --release-type    ) RELEASE_TYPE="$2"; shift 2 ;;
-        --magisk-ver      ) MAGISK_VER="$2"; shift 2 ;;
-        --gapps-brand     ) GAPPS_BRAND="$2"; shift 2 ;;
-        --gapps-variant   ) GAPPS_VARIANT="$2"; shift 2 ;;
-        --root-sol        ) ROOT_SOL="$2"; shift 2 ;;
-        --remove-amazon   ) REMOVE_AMAZON="remove"; shift ;;
-        --compress        ) COMPRESS_OUTPUT="yes"; shift ;;
-        --offline         ) OFFLINE="on"; shift ;;
-        --magisk-custom   ) CUSTOM_MAGISK="debug"; MAGISK_VER=$CUSTOM_MAGISK; shift ;;
-        --debug           ) DEBUG="on"; shift ;;
-        --help            ) usage; exit 0 ;;
-        --                ) shift; break;;
-   esac
-done
 
 ARCH_MAP=(
     "x64"
@@ -203,8 +136,109 @@ ROOT_SOL_MAP=(
     "magisk"
     "none"
 )
+ARR_TO_STR() {
+    local arr=("$@")
+    local joined
+    printf -v joined "%s, " "${arr[@]}"
+    echo "${joined%, }"
+}
+usage() {
+    default
+    echo "Usage:
+    --arch          Architecture of WSA.
 
-check_list(){
+                    Possible values: $(ARR_TO_STR "${ARCH_MAP[@]}")
+                    Default: $ARCH
+
+    --release-type  Release type of WSA.
+                    RP means Release Preview, WIS means Insider Slow, WIF means Insider Fast.
+
+                    Possible values: $(ARR_TO_STR "${RELEASE_TYPE_MAP[@]}")
+                    Default: $RELEASE_TYPE
+
+    --magisk-ver    Magisk version.
+
+                    Possible values: $(ARR_TO_STR "${MAGISK_VER_MAP[@]}")
+                    Default: $MAGISK_VER
+
+    --gapps-brand   GApps brand.
+                    \"none\" for no integration of GApps
+
+                    Possible values: $(ARR_TO_STR "${GAPPS_BRAND_MAP[@]}")
+                    Default: $GAPPS_BRAND
+
+    --gapps-variant GApps variant.
+
+                    Possible values: $(ARR_TO_STR "${GAPPS_VARIANT_MAP[@]}")
+                    Default: $GAPPS_VARIANT
+
+    --root-sol      Root solution.
+                    \"none\" means no root.
+
+                    Possible values: $(ARR_TO_STR "${ROOT_SOL_MAP[@]}")
+                    Default: $ROOT_SOL
+
+Additional Options:
+    --remove-amazon Remove Amazon Appstore from the system
+    --compress      Compress the WSA
+    --offline       Build WSA offline
+    --magisk-custom Install custom Magisk
+    --debug         Debug build mode
+    --help          Show this help message and exit
+
+Example:
+    ./build.sh --release-type RP --magisk-ver beta --gapps-variant pico --remove-amazon
+    ./build.sh --arch arm64 --release-type WIF --gapps-brand MindTheGapps
+    ./build.sh --release-type WIS --gapps-brand none
+    ./build.sh --offline --gapps-variant pico --magisk-custom
+    "
+}
+
+ARGUMENT_LIST=(
+    "arch:"
+    "release-type:"
+    "magisk-ver:"
+    "gapps-brand:"
+    "gapps-variant:"
+    "root-sol:"
+    "remove-amazon"
+    "compress"
+    "offline"
+    "magisk-custom"
+    "debug"
+    "help"
+)
+
+default
+
+opts=$(
+    getopt \
+        --longoptions "$(printf "%s," "${ARGUMENT_LIST[@]}")" \
+        --name "$(basename "$0")" \
+        --options "" \
+        -- "$@"
+) || exit_with_message "Failed to parse options, please check your input"
+
+eval set --"$opts"
+while [[ $# -gt 0 ]]; do
+   case "$1" in
+        --arch            ) ARCH="$2"; shift 2 ;;
+        --release-type    ) RELEASE_TYPE="$2"; shift 2 ;;
+        --magisk-ver      ) MAGISK_VER="$2"; shift 2 ;;
+        --gapps-brand     ) GAPPS_BRAND="$2"; shift 2 ;;
+        --gapps-variant   ) GAPPS_VARIANT="$2"; shift 2 ;;
+        --root-sol        ) ROOT_SOL="$2"; shift 2 ;;
+        --remove-amazon   ) REMOVE_AMAZON="remove"; shift ;;
+        --compress        ) COMPRESS_OUTPUT="yes"; shift ;;
+        --offline         ) OFFLINE="on"; shift ;;
+        --magisk-custom   ) CUSTOM_MAGISK="debug"; MAGISK_VER=$CUSTOM_MAGISK; shift ;;
+        --debug           ) DEBUG="on"; shift ;;
+        --help            ) usage; exit 0 ;;
+        --                ) shift; break;;
+   esac
+done
+
+check_list() {
     local input=$1
     local name=$2
     shift
@@ -216,7 +250,7 @@ check_list(){
             break
         fi
         ((list_count--))
-        if (( "$list_count" <= 0 )); then
+        if (("$list_count" <= 0)); then
             exit_with_message "Invalid $name: $input"
         fi
     done
@@ -499,7 +533,7 @@ service $SERVER_NAME4 /dev/$TMP_PATH/magisk --boot-complete
     seclabel u:r:magisk:s0
     oneshot
 EOF
-echo -e "Integrate Magisk done\n"
+    echo -e "Integrate Magisk done\n"
 fi
 
 echo "Merge Language Resources"
@@ -544,7 +578,7 @@ if [ "$GAPPS_BRAND" != 'none' ]; then
         find "$WORK_DIR"/gapps/ -maxdepth 1 -mindepth 1 -type d -not -path '*product' -exec sudo cp --preserve=all -r {} "$MOUNT_DIR"/system \; || abort
     elif [ "$GAPPS_BRAND" = "MindTheGapps" ]; then
         sudo cp --preserve=all -r "$WORK_DIR"/gapps/system_ext/* "$MOUNT_DIR"/system_ext/ || abort
-        if [ -e "$MOUNT_DIR"/system_ext/priv-app/SetupWizard ] ; then
+        if [ -e "$MOUNT_DIR"/system_ext/priv-app/SetupWizard ]; then
             rm -rf "${MOUNT_DIR:?}/system_ext/priv-app/Provision"
         fi
     fi
@@ -575,7 +609,7 @@ if [ "$GAPPS_BRAND" != 'none' ]; then
 
         sudo chcon --reference="$MOUNT_DIR"/product/lib64/libjni_eglfence.so "$MOUNT_DIR"/product/lib
         find "$WORK_DIR"/gapps/product/lib/ -maxdepth 1 -mindepth 1 -printf '%P\n' | xargs -I file sudo find "$MOUNT_DIR"/product/lib/file -exec chcon --reference="$MOUNT_DIR"/product/lib64/libjni_eglfence.so {} \;
-        find "$WORK_DIR"/gapps/product/lib64/ -maxdepth 1 -mindepth 1 -printf '%P\n' | xargs -I file sudo find "$MOUNT_DIR"/product/lib64/file -type f -exec chcon --reference="$MOUNT_DIR"/product/lib64/libjni_eglfence.so {} \;        
+        find "$WORK_DIR"/gapps/product/lib64/ -maxdepth 1 -mindepth 1 -printf '%P\n' | xargs -I file sudo find "$MOUNT_DIR"/product/lib64/file -type f -exec chcon --reference="$MOUNT_DIR"/product/lib64/libjni_eglfence.so {} \;
         find "$WORK_DIR"/gapps/system_ext/priv-app/ -maxdepth 1 -mindepth 1 -printf '%P\n' | xargs -I dir sudo find "$MOUNT_DIR"/system_ext/priv-app/dir -type d -exec chcon --reference="$MOUNT_DIR"/system_ext/priv-app {} \;
         find "$WORK_DIR"/gapps/system_ext/etc/ -maxdepth 1 -mindepth 1 -printf '%P\n' | xargs -I dir sudo find "$MOUNT_DIR"/system_ext/etc/dir -type d -exec chcon --reference="$MOUNT_DIR"/system_ext/etc {} \;
         find "$WORK_DIR"/gapps/system_ext/priv-app/ -maxdepth 1 -mindepth 1 -printf '%P\n' | xargs -I dir sudo find "$MOUNT_DIR"/system_ext/priv-app/dir -type f -exec chcon --reference="$MOUNT_DIR"/system_ext/priv-app/Settings/Settings.apk {} \;
