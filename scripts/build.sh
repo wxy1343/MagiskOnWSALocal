@@ -102,10 +102,10 @@ usage(){
     --arch          Architecture of WSA, x64 or arm64, default: $ARCH
     --release-type  Release type of WSA, retail, RP (Release Preview), WIS (Insider Slow) or WIF (Insider Fast), default: $RELEASE_TYPE
     --magisk-ver    Magisk version, stable or canary, default: $MAGISK_VER
-    --gapps-brand   GApps brand, OpenGApps or MindTheGApps, default: $GAPPS_BRAND
+    --gapps-brand   GApps brand, OpenGApps or MindTheGapps, default: $GAPPS_BRAND
     --gapps-variant GApps variant, pico or full, etc...., default: $GAPPS_VARIANT
     --root-sol      Root solution, magisk or none, default: $ROOT_SOL
-    --remove-amazon Remove Amazon from the system, default: false
+    --remove-amazon Remove Amazon Appstore from the system, default: false
     --compress      Compress the WSA, default: false
     --offline       Build WSA offline, default: false
     --magisk-custom Install custom Magisk, default: false
@@ -183,7 +183,7 @@ MAGISK_VER_MAP=(
 
 GAPPS_BRAND_MAP=(
     "OpenGApps"
-    "MindTheGApps"
+    "MindTheGapps"
     "none"
 )
 
@@ -198,6 +198,7 @@ GAPPS_VARIANT_MAP=(
     "tvstock"
     "tvmini"
     "none"
+    "MindTheGapps"
 )
 
 ROOT_SOL_MAP=(
@@ -271,7 +272,7 @@ if [ -z "${OFFLINE+x}" ]; then
     fi
 
     echo "Download Artifacts"
-    if ! aria2c --no-conf --log-level=info --log="$DOWNLOAD_DIR/aria2_download.log" -x16 -s16 -j5 -c -R -m0 --allow-overwrite=true --conditional-get=true -d"$DOWNLOAD_DIR" -i"$DOWNLOAD_DIR"/"$DOWNLOAD_CONF_NAME"; then
+    if ! aria2c --no-conf --log-level=info --log="$DOWNLOAD_DIR/aria2_download.log" -x16 -s16 -j5 -c -R -m0 --async-dns=false --check-integrity=true --continue=true --allow-overwrite=true --conditional-get=true -d"$DOWNLOAD_DIR" -i"$DOWNLOAD_DIR"/"$DOWNLOAD_CONF_NAME"; then
         echo "We have encountered an error while downloading files."
         exit 1
     fi
