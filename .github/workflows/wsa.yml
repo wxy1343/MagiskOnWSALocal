@@ -134,14 +134,11 @@ jobs:
           draft: false
           prerelease: false
       
-      - uses: juliangruber/sleep-action@v1
+      - id: release_info
+        uses: pdamianik/release-tag-to-upload-url-action@v1.0.1
         with:
-          time: 10s
-
-      - id: latest_release_info
-        uses: jossef/action-latest-release-info@v1.1.0
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
+          tag: ${{ steps.vars.outputs.sha_short }}
+          token: ${{ github.token }}
           
       - name: Upload Release Asset
         id: upload-release-asset 
@@ -149,7 +146,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          upload_url: ${{ steps.latest_release_info.outputs.upload_url }}
+          upload_url: ${{ steps.release_info.outputs.uploadUrl }}
           asset_path: ${{ steps.run.outputs.path }}
           asset_name: ${{ steps.run.outputs.name }}
           asset_content_type: application/x-7z-compressed
