@@ -29,6 +29,10 @@ if [ "$HOST_ARCH" != "x86_64" ] && [ "$HOST_ARCH" != "aarch64" ]; then
 fi
 cd "$(dirname "$0")" || exit 1
 trap umount_clean EXIT
+# export TMPDIR=$(dirname "$PWD")/WORK_DIR_
+if [ "$TMPDIR" ] && [ ! -d "$TMPDIR" ]; then
+    mkdir -p "$TMPDIR"
+fi
 WORK_DIR=$(mktemp -d -t wsa-build-XXXXXXXXXX_) || exit 1
 DOWNLOAD_DIR=../download
 DOWNLOAD_CONF_NAME=download.list
@@ -50,6 +54,10 @@ umount_clean() {
         sudo rm -rf "${WORK_DIR:?}"
     else
         rm -rf "${WORK_DIR:?}"
+    fi
+    if [ "$TMPDIR" ] && [ -d "$TMPDIR" ]; then
+        rm -rf "${TMPDIR:?}"
+        unset TMPDIR
     fi
 }
 clean_download() {
@@ -84,7 +92,7 @@ default() {
     ARCH=x64
     RELEASE_TYPE=retail
     MAGISK_VER=stable
-    GAPPS_BRAND=OpenGApps
+    GAPPS_BRAND=MindTheGapps
     GAPPS_VARIANT=pico
     ROOT_SOL=magisk
 }
@@ -297,8 +305,8 @@ if [ -z "${OFFLINE+x}" ]; then
     if [ -z "${CUSTOM_MAGISK+x}" ]; then
         python3 generateMagiskLink.py "$MAGISK_VER" "$DOWNLOAD_DIR" "$DOWNLOAD_CONF_NAME" || abort
     fi
-    if [ "$GAPPS_BRAND" = "OpenGApps" ]; then
-        python3 generateGappsLink.py "$ARCH" "$GAPPS_VARIANT" "$DOWNLOAD_DIR" "$DOWNLOAD_CONF_NAME" || abort
+    if [ "$GAPPS_BRAND" != "none" ]; then
+        python3 generateGappsLink.py "$ARCH" "$GAPPS_BRAND" "$GAPPS_VARIANT" "$DOWNLOAD_DIR" "$DOWNLOAD_CONF_NAME" || abort
     fi
 
     echo "Download Artifacts"

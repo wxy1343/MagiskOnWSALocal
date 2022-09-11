@@ -1,13 +1,29 @@
 # Magisk on WSA (with Google Apps)
 
-## Pre-request
+## Support for generating from these systems
 
-- Ubuntu (you can use WSL2)
-  - [Search page](https://apps.microsoft.com/store/search?publisher=Canonical%20Group%20Limited)
+- Linux (x86_64 or arm64)
+
+    The following dependencies are required: `setools lzip wine patchelf e2fsprogs aria2 python3`
+
+    The following components need to be installed using `winetricks`: `msxml6`
+
+    The python3 library `requests` is used.
+
+    Python version ≥ 3.7.
+  - Recommended Use
+    - Ubuntu (You can use [WSL2](https://apps.microsoft.com/store/search?publisher=Canonical%20Group%20Limited))
+
+        `run.sh` will handle all dependencies automatically.
+        No need to type any commands.
+  - Other Distributions
+
+    Install the dependencies manually.
+    Use the command-line program `build.sh`.
 
 ## Features
 
-- Integrate Magisk and OpenGApps in a few clicks within minutes
+- Integrate Magisk and GApps in a few clicks within minutes
 - Keep each build up to date
 - Support both ARM64 and x64
 - Support all OpenGApps variants except for aroma (aroma does not support x86_64, please use super instead)
@@ -24,10 +40,19 @@
 
 1. Star (if you like)
 1. Clone the repo to local
+   - Run `build.sh --help` to get the usage if you want to use CLI.
 1. Run `scripts/run.sh`
-1. Select the version of Magisk and select the [OpenGApps variant](https://github.com/opengapps/opengapps/wiki#variants) you like, select the root solution (none means no root), select the WSA version and its architecture (mostly x64)
-1. Wait for the script to complete and the artifact will be in the `output` folder
+1. Select the WSA version and its architecture (mostly x64)
+1. Select the version of Magisk
+1. Choose which brand of GApps you want to install
+   - OpenGApps
 
+        Select the [OpenGApps variant](https://github.com/opengapps/opengapps/wiki#variants) you like.
+   - MindtheGapps
+
+       There is no other variant we can choose.
+1. Select the root solution (none means no root)
+1. Wait for the script to complete and the artifact will be in the `output` folder
 1. Move the artifact to a place you like
 1. Right-click `Install.ps1` and select `Run with PowerShell`
     - If you previously have a MagiskOnWSA installation, it will automatically uninstall the previous one while **preserving all user data** and install the new one, so don't worry about your data.
@@ -76,9 +101,17 @@
 - How can I get rid of Magisk?
 
     Choose `none` as the root solution.
-- How to install custom OpenGApps?
+- How to install custom GApps?
 
-    [Tutorial](./Custom-OpenGApps.md)
+    [Tutorial](./Custom-GApps.md)
+- Where can I download MindtheGapps?
+
+    You can download from here [MindtheGapps](https://androidfilehost.com/?w=files&flid=322935) ([mirror](http://downloads.codefi.re/jdcteam/javelinanddart/gapps))
+
+    Note that there is no x86_64 pre-build, so you need to build it by yourself ([Repository](https://gitlab.com/MindTheGapps/vendor_gapps)).
+- Can I switch OpenGApps to MindTheGapps and keep user data in a previous build?
+
+    No. You should wipe data after changing the GApps brand. Otherwise, you will find that the installed GApps are not recognized.
 
 ## Credits
 

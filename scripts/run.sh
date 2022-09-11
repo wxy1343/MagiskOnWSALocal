@@ -21,8 +21,6 @@
 # DEBUG=--debug
 # CUSTOM_MAGISK=--magisk-custom
 
-DOWNLOAD_DIR=../download
-
 if [ ! "$BASH_VERSION" ]; then
     echo "Please do not use sh to run this script, just execute it directly" 1>&2
     exit 1
@@ -95,7 +93,7 @@ pip list --disable-pip-version-check | grep -E "^requests " >/dev/null 2>&1 || p
 
 winetricks list-installed | grep -E "^msxml6" >/dev/null 2>&1 || {
     cp -r ../wine/.cache/* ~/.cache
-    winetricks -q msxml6 || abort
+    winetricks msxml6 || abort
 }
 
 function Radiolist {
