@@ -294,8 +294,8 @@ RELEASE_NAME=${RELEASE_NAME_MAP[$RELEASE_TYPE]} || abort
 echo -e "Build: RELEASE_TYPE=$RELEASE_NAME"
 
 WSA_ZIP_PATH=$DOWNLOAD_DIR/wsa-$ARCH-$RELEASE_TYPE.zip
-vclibs_PATH=$DOWNLOAD_DIR/vclibs-"$ARCH".appx
-xaml_PATH=$DOWNLOAD_DIR/xaml-"$ARCH".appx
+vclibs_PATH=$DOWNLOAD_DIR/Microsoft.VCLibs."$ARCH".14.00.Desktop.appx
+xaml_PATH=$DOWNLOAD_DIR/Microsoft.UI.Xaml_"$ARCH".appx
 MAGISK_PATH=$DOWNLOAD_DIR/magisk-$MAGISK_VER.zip
 if [ "$CUSTOM_MAGISK" ]; then
     if [ ! -f "$MAGISK_PATH" ]; then
@@ -472,6 +472,11 @@ if [ "$REMOVE_AMAZON" ]; then
     echo -e "done\n"
 fi
 
+echo "Add device administration features"
+$SUDO sed -i -e '/cts/a \ \ \ \ <feature name="android.software.device_admin" />' -e '/print/i \ \ \ \ <feature name="android.software.managed_users" />' "$MOUNT_DIR"/vendor/etc/permissions/windows.permissions.xml
+$SUDO setfattr -n security.selinux -v "u:object_r:vendor_configs_file:s0" "$MOUNT_DIR"/vendor/etc/permissions/windows.permissions.xml || abort
+echo -e "done\n"
+
 if [ "$ROOT_SOL" = 'magisk' ] || [ "$ROOT_SOL" = '' ]; then
     echo "Integrate Magisk"
     $SUDO mkdir "$MOUNT_DIR"/sbin
@@ -582,9 +587,6 @@ find ../"$ARCH"/system/system/priv-app/ -maxdepth 1 -mindepth 1 -printf '%P\n' |
 find ../"$ARCH"/system/system/priv-app/ -maxdepth 1 -mindepth 1 -printf '%P\n' | xargs -I placeholder $SUDO find "$MOUNT_DIR"/system/priv-app/placeholder -type f -exec chmod 0644 {} \;
 find ../"$ARCH"/system/system/priv-app/ -maxdepth 1 -mindepth 1 -printf '%P\n' | xargs -I placeholder $SUDO find "$MOUNT_DIR"/system/priv-app/placeholder -exec chown root:root {} \;
 find ../"$ARCH"/system/system/priv-app/ -maxdepth 1 -mindepth 1 -printf '%P\n' | xargs -I placeholder $SUDO find "$MOUNT_DIR"/system/priv-app/placeholder -exec setfattr -n security.selinux -v "u:object_r:system_file:s0" {} \; || abort
-find ../"$ARCH"/system/system/etc/permissions/ -maxdepth 1 -mindepth 1 -printf '%P\n' | xargs -I placeholder $SUDO find "$MOUNT_DIR"/system/etc/permissions/placeholder -type f -exec chmod 0644 {} \;
-find ../"$ARCH"/system/system/etc/permissions/ -maxdepth 1 -mindepth 1 -printf '%P\n' | xargs -I placeholder $SUDO find "$MOUNT_DIR"/system/etc/permissions/placeholder -exec chown root:root {} \;
-find ../"$ARCH"/system/system/etc/permissions/ -maxdepth 1 -mindepth 1 -printf '%P\n' | xargs -I placeholder $SUDO find "$MOUNT_DIR"/system/etc/permissions/placeholder -type f -exec setfattr -n security.selinux -v "u:object_r:system_file:s0" {} \; || abort
 echo -e "Add extra packages done\n"
 
 if [ "$GAPPS_BRAND" != 'none' ]; then
@@ -683,6 +685,16 @@ function Test-Administrator {
     }
 }
 
+function Get-InstalledDependencyVersion {
+    param (
+        [string]\$Name,
+        [string]\$ProcessorArchitecture
+    )
+    process {
+        return Get-AppxPackage -Name \$Name | ForEach-Object { if (\$_.Architecture -eq \$ProcessorArchitecture) { \$_ } } | Sort-Object -Property Version | Select-Object -ExpandProperty Version -Last 1;
+    }
+}
+
 function Finish {
     Clear-Host
     Start-Process "wsa://com.topjohnwu.magisk"
@@ -691,7 +703,7 @@ function Finish {
 
 If (-Not (Test-Administrator)) {
     Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy Bypass -Force
-    \$proc = Start-Process -PassThru -WindowStyle Hidden -Verb RunAs powershell.exe -Args "-ExecutionPolicy Bypass -Command Set-Location '\$PSScriptRoot'; &'\$PSCommandPath' EVAL"
+    \$proc = Start-Process -PassThru -WindowStyle Hidden -Verb RunAs ConHost.exe -Args "powershell -ExecutionPolicy Bypass -Command Set-Location '\$PSScriptRoot'; &'\$PSCommandPath' EVAL"
     \$proc.WaitForExit()
     If (\$proc.ExitCode -Ne 0) {
         Clear-Host
@@ -701,7 +713,7 @@ If (-Not (Test-Administrator)) {
     exit
 }
 ElseIf ((\$args.Count -Eq 1) -And (\$args[0] -Eq "EVAL")) {
-    Start-Process powershell.exe -Args "-ExecutionPolicy Bypass -Command Set-Location '\$PSScriptRoot'; &'\$PSCommandPath'"
+    Start-Process ConHost.exe -Args "powershell -ExecutionPolicy Bypass -Command Set-Location '\$PSScriptRoot'; &'\$PSCommandPath'"
     exit
 }
 
@@ -726,11 +738,27 @@ If (\$(Get-WindowsOptionalFeature -Online -FeatureName 'VirtualMachinePlatform')
     }
 }
 
-Add-AppxPackage -ForceApplicationShutdown -ForceUpdateFromAnyVersion -Path vclibs-$ARCH.appx
-Add-AppxPackage -ForceApplicationShutdown -ForceUpdateFromAnyVersion -Path xaml-$ARCH.appx
+[xml]\$Xml = Get-Content ".\AppxManifest.xml";
+\$Name = \$Xml.Package.Identity.Name;
+\$ProcessorArchitecture = \$Xml.Package.Identity.ProcessorArchitecture;
+\$Dependencies = \$Xml.Package.Dependencies.PackageDependency;
+\$Dependencies | ForEach-Object {
+    If (\$_.Name -Eq "Microsoft.VCLibs.140.00.UWPDesktop") {
+        \$HighestInstalledVCLibsVersion = Get-InstalledDependencyVersion -Name \$_.Name -ProcessorArchitecture \$ProcessorArchitecture;
+        If ( \$HighestInstalledVCLibsVersion -Lt \$_.MinVersion ) {
+            Add-AppxPackage -ForceApplicationShutdown -ForceUpdateFromAnyVersion -Path "Microsoft.VCLibs.\$ProcessorArchitecture.14.00.Desktop.appx"
+        }
+    }
+    ElseIf (\$_.Name -Match "Microsoft.UI.Xaml") {
+        \$HighestInstalledXamlVersion = Get-InstalledDependencyVersion -Name \$_.Name -ProcessorArchitecture \$ProcessorArchitecture;
+        If ( \$HighestInstalledXamlVersion -Lt \$_.MinVersion ) {
+            Add-AppxPackage -ForceApplicationShutdown -ForceUpdateFromAnyVersion -Path "Microsoft.UI.Xaml_\$ProcessorArchitecture.appx"
+        }
+    }
+}
 
 \$Installed = \$null
-\$Installed = Get-AppxPackage -Name 'MicrosoftCorporationII.WindowsSubsystemForAndroid'
+\$Installed = Get-AppxPackage -Name \$Name
 
 If ((\$null -Ne \$Installed) -And (-Not (\$Installed.IsDevelopmentMode))) {
     Clear-Host
