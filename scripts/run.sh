@@ -52,6 +52,8 @@ check_dependencies() {
     command -v aria2c >/dev/null 2>&1 || NEED_INSTALL+=("aria2")
     command -v 7z > /dev/null 2>&1 || NEED_INSTALL+=("p7zip-full")
     command -v setfattr > /dev/null 2>&1 || NEED_INSTALL+=("attr")
+    command -v xz > /dev/null 2>&1 || NEED_INSTALL+=("xz-utils")
+    command -v unzip > /dev/null 2>&1 || NEED_INSTALL+=("unzip")
 }
 check_dependencies
 osrel=$(sed -n '/^ID_LIKE=/s/^.*=//p' /etc/os-release);
@@ -103,8 +105,12 @@ if [ -n "${NEED_INSTALL[*]}" ]; then
     else
         if [ "$PM" = "zypper" ]; then
             NEED_INSTALL_FIX=${NEED_INSTALL[*]}
-            NEED_INSTALL_FIX=${NEED_INSTALL_FIX//setools/setools-console} >> /dev/null 2>&1
-            NEED_INSTALL_FIX=${NEED_INSTALL_FIX//whiptail/dialog} >> /dev/null 2>&1
+            {
+                NEED_INSTALL_FIX=${NEED_INSTALL_FIX//setools/setools-console} 2>&1
+                NEED_INSTALL_FIX=${NEED_INSTALL_FIX//whiptail/dialog} 2>&1
+                NEED_INSTALL_FIX=${NEED_INSTALL_FIX//xz-utils/xz} 2>&1
+            }  >> /dev/null
+            
             readarray -td ' ' NEED_INSTALL <<<"$NEED_INSTALL_FIX "; unset 'NEED_INSTALL[-1]';
         elif [ "$PM" = "apk" ]; then
             NEED_INSTALL_FIX=${NEED_INSTALL[*]}
@@ -142,8 +148,9 @@ if [ GAPPS_VARIANT != "none" ]; then
 fi
 
 COMPRESS_OUTPUT="--compress"
+COMPRESS_FORMAT="7z"
 
 declare -A RELEASE_TYPE_MAP=(["retail"]="retail" ["release preview"]="RP" ["insider slow"]="WIS" ["insider fast"]="WIF")
-COMMAND_LINE=(--arch "$ARCH" --release-type "${RELEASE_TYPE_MAP[$RELEASE_TYPE]}" --magisk-ver "$MAGISK_VER" --gapps-brand "$GAPPS_BRAND" --gapps-variant "$GAPPS_VARIANT" "$REMOVE_AMAZON" --root-sol "$ROOT_SOL" "$COMPRESS_OUTPUT" "$OFFLINE" "$DEBUG" "$CUSTOM_MAGISK" --debug)
+COMMAND_LINE=(--arch "$ARCH" --release-type "${RELEASE_TYPE_MAP[$RELEASE_TYPE]}" --magisk-ver "$MAGISK_VER" --gapps-brand "$GAPPS_BRAND" --gapps-variant "$GAPPS_VARIANT" "$REMOVE_AMAZON" --root-sol "$ROOT_SOL" "$COMPRESS_OUTPUT" "$OFFLINE" "$DEBUG" "$CUSTOM_MAGISK" --debug --compress-format "$COMPRESS_FORMAT")
 echo "COMMAND_LINE=${COMMAND_LINE[*]}"
 ./build.sh "${COMMAND_LINE[@]}"

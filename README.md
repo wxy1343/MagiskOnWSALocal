@@ -1,15 +1,6 @@
 # Magisk on WSA (with Google Apps)
 
-:warning: For fork developers: Please [use the GitHub Support virtual assistant chatbot](https://support.github.com/contact?flow=detach_fork&subject=Detach%20Fork&tags=rr-forks) to detach your fork from [upstream](https://github.com/LSPosed/MagiskOnWSALocal) before building with GitHub Actions, as GitHub will count your forked GitHub Actions usage against this upstream repository, which may cause this upstream repository gets disabled by GitHub staff because of numerous forks building GitHub Actions, and counting the forks' Action usage against this upstream repository.
-
-We are not against forks, but please detach them from our repository. If you do not make changes one day after receiving the detachment request, our organization will ban you.
-
-<details>
-    <summary>How to detach your fork from this upstream repository (a visual guide):</summary>
-    <p>
-        <img src="https://user-images.githubusercontent.com/96967473/194208623-194e5926-feb9-4172-b57f-a82179245d02.png" title="How to detach form using GitHub Support virtual assistant chatbot">
-            </p>
- </details>
+:warning: For fork developers: Please don't build using GitHub Actions, as GitHub will count your forked GitHub Actions usage against this upstream repository, which may cause this upstream repository gets disabled by GitHub staff like [MagiskOnWSA](https://github.com/LSPosed/MagiskOnWSA) because of numerous forks building GitHub Actions, and counting the forks' Action usage against this upstream repository.
 
 ## Support for generating from these systems
 
@@ -62,10 +53,11 @@ We are not against forks, but please detach them from our repository. If you do 
 
 1. Star (if you like)
 1. Clone the repo to local
-   - Run `build.sh --help` to get the usage if you want to use CLI.
-1. Run `scripts/run.sh`
-1. Select the WSA version and its architecture (mostly x64)
-1. Select the version of Magisk
+   - Run `cd scripts`
+   - Then run `./build.sh --help` (optional) to get the usage if you want to use CLI.
+1. Run `./run.sh` under scripts directory.
+1. Select the WSA version and its architecture (mostly x64).
+1. Select the version of Magisk.
 1. Choose which brand of GApps you want to install
    - OpenGApps
 
@@ -74,7 +66,7 @@ We are not against forks, but please detach them from our repository. If you do 
 
        There is no other variant we can choose.
 1. Select the root solution (none means no root)
-1. If you are running the script for the first time, it will take some time to complete. After the script completes, two new folders named `output` and `download` will be generated in the `MagiskOnWSALocal` folder. Go to the `output` folder. While running the ./run.sh script in the last step, if you selected `Yes` for `Do you want to compress the output?` then in `output` folder you will see a compressed file called `WSA-with-magisk-stable-MindTheGapps_2207.40000.8.0_x64_Release-Nightly`or else there will be folder with the `WSA-with-magisk-stable-MindTheGapps_2207.40000.8.0_x64_Release-Nightly`. If there is a folder open it and skip to step 10. NOTE: The name of compressed file or the folder generated in the `output` folder may be different for you. It will be dependent on the choices made when executing `./run.sh`
+1. If you are running the script for the first time, it will take some time to complete. After the script completes, two new folders named `output` and `download` will be generated in the `MagiskOnWSALocal` folder. Go to the `output` folder. While running the `./run.sh` script in the step 3, if you selected `Yes` for `Do you want to compress the output?` then in `output` folder you will see a compressed file called `WSA-with-magisk-stable-MindTheGapps_2207.40000.8.0_x64_Release-Nightly`or else there will be folder with the `WSA-with-magisk-stable-MindTheGapps_2207.40000.8.0_x64_Release-Nightly`. If there is a folder open it and skip to step 10. NOTE: The name of compressed file or the folder generated in the `output` folder may be different for you. It will be dependent on the choices made when executing `./run.sh`
 1. Extract the compressed file and open the folder created after the extraction of the file.
 1. Here look for file `Run.bat` and run it.
     - If you previously have a MagiskOnWSA installation, it will automatically uninstall the previous one while **preserving all user data** and install the new one, so don't worry about your data.
