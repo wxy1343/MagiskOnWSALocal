@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 #
 # This file is part of MagiskOnWSALocal.
 #
@@ -26,6 +26,7 @@ import html
 import warnings
 import re
 from pathlib import Path
+import os
 
 warnings.filterwarnings("ignore")
 
@@ -91,7 +92,13 @@ for i, v, f in identities:
     #     out_file_name = f"Microsoft.VCLibs.140.00.UWPDesktop_{arch}.appx"
     #     out_file = download_dir / out_file_name
     elif re.match(f"MicrosoftCorporationII\.WindowsSubsystemForAndroid_.*\.msixbundle", f):
-        out_file_name = f"wsa-{arch}-{release_type}.zip"
+        wsa_long_ver = re.search(u'\d{4}.\d{5}.\d{1,}.\d{1,}', f).group()
+        print(f'WSA Version={wsa_long_ver}\n')
+        main_ver = wsa_long_ver.split(".")[0]
+        with open(os.environ['WSA_WORK_ENV'], 'a') as environ_file:
+            environ_file.write(f"DOWN_WSA_VERSION={wsa_long_ver}\n")
+            environ_file.write(f"DOWN_WSA_MAIN_VERSION={main_ver}\n")
+        out_file_name = f"wsa-{release_type}.zip"
         out_file = download_dir / out_file_name
     else:
         continue
