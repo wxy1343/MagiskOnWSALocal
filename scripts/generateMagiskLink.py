@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 #
 # This file is part of MagiskOnWSALocal.
 #
@@ -15,7 +15,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with MagiskOnWSALocal.  If not, see <https://www.gnu.org/licenses/>.
 #
-# Copyright (C) 2022 LSPosed Contributors
+# Copyright (C) 2023 LSPosed Contributors
 #
 
 import sys
