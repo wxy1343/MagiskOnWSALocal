@@ -45,7 +45,7 @@ function YesNoBox {
     $DIALOG --title "${o[title]}" --yesno "${o[text]}" 0 0
 }
 
-if [ GAPPS_VARIANT != "none" ]; then
+if [ "$GAPPS_VARIANT" != "none" ]; then
     GAPPS_BRAND="OpenGApps"
 fi
 
